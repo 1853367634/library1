@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{common/header :: header('图书管理')}"></head>
+<body>
+    <div th:replace="~{common/header :: navbar}"></div>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索图书..." aria-label="搜索图书">
+                    <button class="btn btn-primary" onclick="searchBooks()" title="搜索图书" aria-label="搜索图书">
+                        <i class="fas fa-search" aria-hidden="true"></i> 搜索
+                    </button>
+                    <button class="btn btn-success ms-2" onclick="showAddModal()" title="添加图书" aria-label="添加图书">
+                        <i class="fas fa-plus" aria-hidden="true"></i> 添加图书
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>书名</th>
+                        <th>作者</th>
+                        <th>出版社</th>
+                        <th>分类</th>
+                        <th>库存</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="bookList">
+                    <!-- 图书列表将通过JavaScript动态加载 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <nav aria-label="分页导航">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- 分页将通过JavaScript动态加载 -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑图书模态框 -->
+    <div class="modal fade" id="bookModal" tabindex="-1" aria-labelledby="bookModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="bookModalLabel">添加图书</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="bookForm">
+                        <input type="hidden" id="bookId">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">书名</label>
+                            <input type="text" class="form-control" id="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="author" class="form-label">作者</label>
+                            <input type="text" class="form-control" id="author" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="publisher" class="form-label">出版社</label>
+                            <input type="text" class="form-control" id="publisher" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="category" class="form-label">分类</label>
+                            <input type="text" class="form-control" id="category" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="stock" class="form-label">库存</label>
+                            <input type="number" class="form-control" id="stock" required min="0">
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">简介</label>
+                            <textarea class="form-control" id="description" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveBook()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:replace="~{common/footer :: scripts}"></div>
+    <script th:inline="javascript">
+        let currentPage = 1;
+        let pageSize = 10;
+        let searchText = '';
+        let bookModal;
+
+        $(document).ready(function() {
+            bookModal = new bootstrap.Modal(document.getElementById('bookModal'));
+            loadBooks();
+        });
+
+        function loadBooks() {
+            $.get('/book/page', {
+                pageNum: currentPage,
+                pageSize: pageSize,
+                search: searchText
+            }, function(res) {
+                if (res.code === 200) {
+                    renderBooks(res.data.records);
+                    renderPagination(res.data, 'changePage');
+                }
+            });
+        }
+
+        function renderBooks(books) {
+            let html = '';
+            books.forEach(function(book) {
+                html += `
+                    <tr>
+                        <td>${book.id}</td>
+                        <td>${book.name}</td>
+                        <td>${book.author}</td>
+                        <td>${book.publisher}</td>
+                        <td>${book.category}</td>
+                        <td>${book.stock}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="showEditModal(${book.id})">
+                                <i class="fas fa-edit"></i> 编辑
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteBook(${book.id})">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            $('#bookList').html(html);
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadBooks();
+        }
+
+        function searchBooks() {
+            searchText = $('#searchInput').val();
+            currentPage = 1;
+            loadBooks();
+        }
+
+        function showAddModal() {
+            $('#bookModalLabel').text('添加图书');
+            $('#bookForm')[0].reset();
+            $('#bookId').val('');
+            bookModal.show();
+        }
+
+        function showEditModal(id) {
+            $('#bookModalLabel').text('编辑图书');
+            $.get('/book/' + id, function(res) {
+                if (res.code === 200) {
+                    const book = res.data;
+                    $('#bookId').val(book.id);
+                    $('#name').val(book.name);
+                    $('#author').val(book.author);
+                    $('#publisher').val(book.publisher);
+                    $('#category').val(book.category);
+                    $('#stock').val(book.stock);
+                    $('#description').val(book.description);
+                    bookModal.show();
+                } else {
+                    showError(res.message || '获取图书信息失败');
+                }
+            });
+        }
+
+        function saveBook() {
+            const book = {
+                id: $('#bookId').val(),
+                name: $('#name').val(),
+                author: $('#author').val(),
+                publisher: $('#publisher').val(),
+                category: $('#category').val(),
+                stock: $('#stock').val(),
+                description: $('#description').val()
+            };
+
+            $.ajax({
+                url: '/book/save',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(book),
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('保存成功');
+                        bookModal.hide();
+                        loadBooks();
+                    } else {
+                        showError(res.message || '保存失败');
+                    }
+                },
+                error: function(xhr) {
+                    handleAjaxError(xhr);
+                }
+            });
+        }
+
+        function deleteBook(id) {
+            if (!showConfirm('确定要删除这本书吗？')) {
+                return;
+            }
+
+            $.ajax({
+                url: '/book/' + id,
+                type: 'DELETE',
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('删除成功');
+                        loadBooks();
+                    } else {
+                        showError(res.message || '删除失败');
+                    }
+                },
+                error: function(xhr) {
+                    handleAjaxError(xhr);
+                }
+            });
+        }
+    </script>
+</body>
+</html> 

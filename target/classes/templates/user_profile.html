@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{common/header :: header('个人信息')}"></head>
+<body>
+    <div th:replace="~{common/header :: navbar}"></div>
+
+    <div class="container mt-4">
+        <div class="row">
+            <!-- 基本信息卡片 -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">基本信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="profileForm">
+                            <div class="mb-3">
+                                <label class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="username" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">姓名</label>
+                                <input type="text" class="form-control" id="name">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">手机号</label>
+                                <input type="text" class="form-control" id="phone" pattern="[0-9]{11}" title="请输入11位手机号">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">角色</label>
+                                <input type="text" class="form-control" id="role" readonly>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="updateProfile()">
+                                保存修改
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改密码卡片 -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="card-title">修改密码</h5>
+                    <div class="mb-3">
+                        <label class="form-label">原密码</label>
+                        <input type="password" class="form-control" id="oldPassword">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">新密码</label>
+                        <input type="password" class="form-control" id="newPassword">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">确认新密码</label>
+                        <input type="password" class="form-control" id="confirmPassword">
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="updatePassword()">
+                        修改密码
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:replace="~{common/footer :: scripts}"></div>
+    <script>
+        let currentUserId;
+
+        $(document).ready(function() {
+            loadUserInfo();
+        });
+
+        function loadUserInfo() {
+            $.get('/user/info', function(res) {
+                if (res.code === 200) {
+                    const user = res.data;
+                    currentUserId = user.id;
+                    $('#username').val(user.username);
+                    $('#name').val(user.name);
+                    $('#phone').val(user.phone);
+                    $('#role').val(user.role === 'SUPER_ADMIN' ? '超级管理员' : 
+                                 user.role === 'ADMIN' ? '管理员' : '普通用户');
+                }
+            });
+        }
+
+        function updateProfile() {
+            const data = {
+                id: currentUserId,
+                name: $('#name').val(),
+                phone: $('#phone').val()
+            };
+            
+            $.ajax({
+                url: '/user/update',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('更新成功');
+                        loadUserInfo();
+                    } else {
+                        showError(res.message || '更新失败');
+                    }
+                }
+            });
+        }
+
+        function updatePassword() {
+            const oldPassword = $('#oldPassword').val();
+            const newPassword = $('#newPassword').val();
+            const confirmPassword = $('#confirmPassword').val();
+
+            if (!oldPassword || !newPassword || !confirmPassword) {
+                showError('请填写完整的密码信息');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showError('两次输入的新密码不一致');
+                return;
+            }
+
+            $.ajax({
+                url: '/user/update-password',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    oldPassword: oldPassword,
+                    password: newPassword
+                }),
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('密码修改成功，请重新登录');
+                        setTimeout(function() {
+                            location.href = '/login';
+                        }, 1500);
+                    } else {
+                        showError(res.message || '修改失败');
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html> 
+</html> 

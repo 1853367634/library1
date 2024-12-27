@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{common/header :: header('用户管理')}"></head>
+<body>
+    <div th:replace="~{common/header :: navbar}"></div>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="searchInput" placeholder="搜索用户..." aria-label="搜索用户">
+                    <button class="btn btn-primary" onclick="searchUsers()" title="搜索用户" aria-label="搜索用户">
+                        <i class="fas fa-search"></i> 搜索
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>手机号</th>
+                        <th>角色</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="userList">
+                    <!-- 用户列表将通过JavaScript动态加载 -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <nav aria-label="分页导航">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- 分页将通过JavaScript动态加载 -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户角色编辑模态框 -->
+    <div class="modal" id="userModal" tabindex="-1">
+        <div class="modal-dialog" role="dialog" aria-labelledby="userModalLabel">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userModalLabel">修改用户角色</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="userForm" novalidate>
+                        <input type="hidden" id="userId">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">用户名</label>
+                            <input type="text" class="form-control" id="username" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="role" class="form-label">角色</label>
+                            <select class="form-select" id="role" required>
+                                <option value="USER">普通用户</option>
+                                <option value="ADMIN">管理员</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUser()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:replace="~{common/footer :: scripts}"></div>
+    <script th:inline="javascript">
+        let currentPage = 1;
+        let pageSize = 10;
+        let searchText = '';
+        let userModal;
+        const currentUser = /*[[${session.user}]]*/ null;
+        const isSuperAdmin = currentUser && currentUser.role === 'SUPER_ADMIN';
+        const isAdmin = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN');
+
+        $(document).ready(function() {
+            if (!isAdmin) {
+                showError('权限不足');
+                setTimeout(() => {
+                    window.location.href = '/index';
+                }, 1500);
+                return;
+            }
+            
+            // 初始化模态框
+            const modalElement = document.getElementById('userModal');
+            userModal = new bootstrap.Modal(modalElement);
+            
+            // 监听模态框事件
+            modalElement.addEventListener('shown.bs.modal', function () {
+                document.getElementById('role').focus();
+            });
+            
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                document.getElementById('userForm').reset();
+            });
+            
+            loadUsers();
+
+            // 只有超级管理员可以修改角色
+            if (!isSuperAdmin) {
+                $('#role').prop('disabled', true);
+            }
+        });
+
+        function loadUsers() {
+            $.ajax({
+                url: '/user/page',
+                type: 'GET',
+                data: {
+                    pageNum: currentPage,
+                    pageSize: pageSize,
+                    search: searchText
+                },
+                success: function(res) {
+                    if (res.code === 200) {
+                        renderUsers(res.data.records);
+                        renderPagination(res.data, 'changePage');
+                    } else {
+                        showError(res.message || '加载用户列表失败');
+                    }
+                },
+                error: function(xhr) {
+                    handleAjaxError(xhr);
+                }
+            });
+        }
+
+        function renderUsers(users) {
+            let html = '';
+            users.forEach(function(user) {
+                const canEdit = isSuperAdmin && user.role !== 'SUPER_ADMIN';
+                html += `
+                    <tr>
+                        <td>${user.id}</td>
+                        <td>${user.username}</td>
+                        <td>${user.phone || '-'}</td>
+                        <td>${getRoleName(user.role)}</td>
+                        <td>
+                            ${isSuperAdmin ? `
+                                <button class="btn btn-sm btn-primary" onclick="showEditModal(${user.id})" ${canEdit ? '' : 'disabled'}>
+                                    <i class="fas fa-user-cog"></i> 修改角色
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+            $('#userList').html(html);
+        }
+
+        function getRoleName(role) {
+            switch (role) {
+                case 'SUPER_ADMIN':
+                    return '超级管理员';
+                case 'ADMIN':
+                    return '管理员';
+                case 'USER':
+                    return '普通用户';
+                default:
+                    return '未知';
+            }
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadUsers();
+        }
+
+        function searchUsers() {
+            searchText = $('#searchInput').val();
+            currentPage = 1;
+            loadUsers();
+        }
+
+        function showEditModal(id) {
+            $('#userModalLabel').text('修改用户角色');
+            $.get('/user/' + id, function(res) {
+                if (res.code === 200) {
+                    const user = res.data;
+                    $('#userId').val(user.id);
+                    $('#username').val(user.username);
+                    $('#role').val(user.role);
+                    
+                    // 如果是超级管理员，禁用角色选择
+                    if (user.role === 'SUPER_ADMIN') {
+                        $('#role').prop('disabled', true);
+                    } else if (isSuperAdmin) {
+                        $('#role').prop('disabled', false);
+                    }
+                    
+                    userModal.show();
+                } else {
+                    showError(res.message || '获取用户信息失败');
+                }
+            });
+        }
+
+        function saveUser() {
+            const form = document.getElementById('userForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            const userId = $('#userId').val();
+            const user = {
+                id: userId,
+                role: $('#role').val()
+            };
+
+            // 只有超级管理员可以修改角色
+            if (!isSuperAdmin) {
+                showError('权限不足');
+                return;
+            }
+
+            $.ajax({
+                url: '/user/update-role',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(user),
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('保存成功');
+                        userModal.hide();
+                        loadUsers();
+                    } else {
+                        showError(res.message || '保存失败');
+                    }
+                },
+                error: function(xhr) {
+                    handleAjaxError(xhr);
+                }
+            });
+        }
+    </script>
+</body>
+</html> 

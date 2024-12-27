@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{common/header :: header('借阅历史')}"></head>
+<body>
+    <div th:replace="~{common/header :: navbar}"></div>
+
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">借阅历史</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>书名</th>
+                                <th>简介</th>
+                                <th>借阅时间</th>
+                                <th>归还时间</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordList">
+                            <!-- 借阅记录将通过JavaScript动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+                <nav>
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- 分页将通过JavaScript动态加载 -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div th:replace="~{common/footer :: scripts}"></div>
+    <script>
+        let currentPage = 1;
+        let pageSize = 10;
+
+        $(document).ready(function() {
+            loadRecords();
+        });
+
+        function loadRecords() {
+            $.get('/borrow/page', {
+                pageNum: currentPage,
+                pageSize: pageSize
+            }, function(res) {
+                if (res.code === 200) {
+                    renderRecords(res.data.records);
+                    renderPagination(res.data, 'changePage');
+                }
+            });
+        }
+
+        function renderRecords(records) {
+            let html = '';
+            records.forEach(function(record) {
+                html += `
+                    <tr>
+                        <td>${record.bookName}</td>
+                        <td>
+                            <div class="text-muted" style="max-width: 300px; max-height: 100px; overflow-y: auto;">
+                                ${record.description || '暂无简介'}
+                            </div>
+                        </td>
+                        <td>${formatDateTime(record.borrowTime)}</td>
+                        <td>${record.returnTime ? formatDateTime(record.returnTime) : '-'}</td>
+                        <td>${record.status === 0 ? '<span class="badge bg-warning">借阅中</span>' : '<span class="badge bg-success">已归还</span>'}</td>
+                        <td>
+                            ${record.status === 0 ? 
+                                `<button class="btn btn-sm btn-primary return-btn" data-record-id="${record.id}">归还</button>` : 
+                                '-'}
+                        </td>
+                    </tr>
+                `;
+            });
+            $('#recordList').html(html);
+
+            // 绑定归还按钮点击事件
+            $('.return-btn').click(function() {
+                const recordId = $(this).data('record-id');
+                returnBook(recordId, this);
+            });
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadRecords();
+        }
+
+        function returnBook(recordId, button) {
+            if (!showConfirm('确定要归还这本书吗？')) {
+                return;
+            }
+
+            button.disabled = true;
+            $(button).html('归还中...');
+            
+            $.ajax({
+                url: '/borrow/return/' + recordId,
+                type: 'POST',
+                success: function(res) {
+                    if (res.code === 200) {
+                        showSuccess('归还成功');
+                        loadRecords();
+                    } else {
+                        showError(res.message || '归还失败');
+                        button.disabled = false;
+                        $(button).html('归还');
+                    }
+                },
+                error: function(xhr) {
+                    showError(xhr.responseJSON?.message || '归还失败，请重试');
+                    button.disabled = false;
+                    $(button).html('归还');
+                }
+            });
+        }
+
+        function formatDateTime(dateTime) {
+            return new Date(dateTime).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+    </script>
+</body>
+</html> 
